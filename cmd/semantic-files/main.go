@@ -16,7 +16,9 @@ import (
 )
 
 func main() {
-	addDir := flag.String("add", "", "add a directory to track and index its .txt files")
+	addDir := flag.String("add", "", "add a directory to track and index its files")
+	removeDir := flag.String("remove", "", "stop tracking a directory and remove its index")
+	listDirs := flag.Bool("list-dirs", false, "list all tracked directories and exit")
 	flag.Parse()
 
 	home, err := os.UserHomeDir()
@@ -36,6 +38,32 @@ func main() {
 	}
 	defer database.Close()
 
+	if *removeDir != "" {
+		dir, err := database.GetTrackedDirectoryByPath(*removeDir)
+		if err != nil {
+			log.Fatalf("directory not found: %s", *removeDir)
+		}
+		if err := database.RemoveTrackedDirectory(dir.ID); err != nil {
+			log.Fatalf("removing directory: %v", err)
+		}
+		fmt.Printf("Removed: %s\n", *removeDir)
+		return
+	}
+
+	if *listDirs {
+		dirs, err := database.GetTrackedDirectories()
+		if err != nil {
+			log.Fatalf("listing directories: %v", err)
+		}
+		if len(dirs) == 0 {
+			fmt.Println("No tracked directories.")
+		}
+		for _, d := range dirs {
+			fmt.Println(d.Path)
+		}
+		return
+	}
+
 	b, err := bridge.New(dbPath)
 	if err != nil {
 		log.Fatalf("starting python bridge: %v", err)
@@ -53,7 +81,7 @@ func main() {
 		return
 	}
 
-	// // Index any new files in tracked directories
+	// TODO Index any new files in tracked directories
 	// if err := idx.IndexNewFiles(); err != nil {
 	// 	fmt.Fprintf(os.Stderr, "Warning: error indexing new files: %v\n", err)
 	// }

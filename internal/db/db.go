@@ -160,6 +160,17 @@ func (d *DB) InsertIndexedFile(directoryID int64, path string, size int64, modif
 	return result.LastInsertId()
 }
 
+func (d *DB) RemoveTrackedDirectory(id int64) error {
+	// Delete indexed_files first; embeddings cascade automatically via FK
+	if _, err := d.conn.Exec("DELETE FROM indexed_files WHERE directory_id = ?", id); err != nil {
+		return fmt.Errorf("removing indexed files: %w", err)
+	}
+	if _, err := d.conn.Exec("DELETE FROM tracked_directories WHERE id = ?", id); err != nil {
+		return fmt.Errorf("removing tracked directory: %w", err)
+	}
+	return nil
+}
+
 func (d *DB) GetTrackedDirectoryByPath(path string) (*TrackedDirectory, error) {
 	var dir TrackedDirectory
 	err := d.conn.QueryRow(

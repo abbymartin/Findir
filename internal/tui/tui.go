@@ -28,6 +28,10 @@ type SearchResult struct {
 
 type modelReadyMsg struct{}
 
+type trackedDirsMsg struct {
+	dirs []db.TrackedDirectory
+}
+
 type searchResultsMsg struct {
 	results []SearchResult
 }
@@ -37,6 +41,10 @@ type searchErrorMsg struct {
 }
 
 type indexDoneMsg struct {
+	err error
+}
+
+type removeDoneMsg struct {
 	err error
 }
 
@@ -53,6 +61,8 @@ type Model struct {
 	searched    bool
 	indexStatus string
 	modelReady  bool
+	trackedDirs []db.TrackedDirectory
+	selectedDir int
 	width       int
 	height      int
 }
@@ -79,9 +89,23 @@ func New(b *bridge.PythonBridge, database *db.DB, idx *indexer.Indexer) Model {
 
 func (m Model) Init() tea.Cmd {
 	b := m.bridge
+	database := m.database
+	return tea.Batch(
+		func() tea.Msg {
+			b.Send(map[string]interface{}{"action": "warmup"})
+			return modelReadyMsg{}
+		},
+		func() tea.Msg {
+			dirs, _ := database.GetTrackedDirectories()
+			return trackedDirsMsg{dirs: dirs}
+		},
+	)
+}
+
+func loadTrackedDirs(database *db.DB) tea.Cmd {
 	return func() tea.Msg {
-		b.Send(map[string]interface{}{"action": "warmup"})
-		return modelReadyMsg{}
+		dirs, _ := database.GetTrackedDirectories()
+		return trackedDirsMsg{dirs: dirs}
 	}
 }
 
@@ -123,6 +147,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.handleSearch()
 			}
 			return m.handleAddDir()
+		case tea.KeyUp:
+			if m.mode == addDirView && len(m.trackedDirs) > 0 {
+				m.selectedDir--
+				if m.selectedDir < 0 {
+					m.selectedDir = 0
+				}
+			}
+			return m, nil
+		case tea.KeyDown:
+			if m.mode == addDirView && len(m.trackedDirs) > 0 {
+				m.selectedDir++
+				if m.selectedDir >= len(m.trackedDirs) {
+					m.selectedDir = len(m.trackedDirs) - 1
+				}
+			}
+			return m, nil
+		}
+
+		// Delete selected directory on 'd' or Delete key in add-dir view
+		if m.mode == addDirView && !m.loading && len(m.trackedDirs) > 0 {
+			if msg.String() == "d" || msg.Type == tea.KeyDelete {
+				return m.handleRemoveDir()
+			}
 		}
 
 	case searchResultsMsg:
@@ -135,15 +182,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		return m, nil
 
+	case trackedDirsMsg:
+		m.trackedDirs = msg.dirs
+		if m.selectedDir >= len(m.trackedDirs) {
+			m.selectedDir = len(m.trackedDirs) - 1
+		}
+		if m.selectedDir < 0 {
+			m.selectedDir = 0
+		}
+		return m, nil
+
 	case indexDoneMsg:
 		m.loading = false
 		if msg.err != nil {
 			m.indexStatus = fmt.Sprintf("Error: %v", msg.err)
 		} else {
-			m.indexStatus = "Directory indexed successfully."
+			m.indexStatus = "Directory added successfully."
 			m.dirInput.SetValue("")
 		}
-		return m, nil
+		return m, loadTrackedDirs(m.database)
+
+	case removeDoneMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.indexStatus = fmt.Sprintf("Error: %v", msg.err)
+		} else {
+			m.indexStatus = "Directory removed."
+		}
+		return m, loadTrackedDirs(m.database)
 	}
 
 	if !m.modelReady {
@@ -168,6 +234,20 @@ func (m Model) handleSearch() (tea.Model, tea.Cmd) {
 	m.searched = true
 	m.err = nil
 	return m, m.doSearch(query)
+}
+
+func (m Model) handleRemoveDir() (tea.Model, tea.Cmd) {
+	if m.selectedDir < 0 || m.selectedDir >= len(m.trackedDirs) {
+		return m, nil
+	}
+	dir := m.trackedDirs[m.selectedDir]
+	m.loading = true
+	m.indexStatus = fmt.Sprintf("Removing %s...", dir.Path)
+	database := m.database
+	return m, func() tea.Msg {
+		err := database.RemoveTrackedDirectory(dir.ID)
+		return removeDoneMsg{err: err}
+	}
 }
 
 func (m Model) handleAddDir() (tea.Model, tea.Cmd) {
@@ -257,6 +337,14 @@ var (
 	loadingStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("214")).
 			Bold(true)
+
+	dirItemStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("39")).
+			PaddingLeft(2)
+
+	dirLabelStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("243")).
+			Bold(true)
 )
 
 func (m Model) View() string {
@@ -296,17 +384,50 @@ func (m Model) View() string {
 		b.WriteString("\n\n")
 		if m.loading {
 			b.WriteString(statusStyle.Render(m.indexStatus))
-			b.WriteString("\n")
 		} else if m.indexStatus != "" {
 			b.WriteString(statusStyle.Render(m.indexStatus))
-			b.WriteString("\n")
 		}
+		b.WriteString("\n\n")
+		m.renderTrackedDirs(&b)
 	}
 
 	b.WriteString(statusStyle.Render("tab: switch view • enter: submit • esc: quit"))
 	b.WriteString("\n")
 
 	return b.String()
+}
+
+func (m Model) renderTrackedDirs(b *strings.Builder) {
+	const maxDisplay = 8
+	dirs := m.trackedDirs
+
+	if len(dirs) == 0 {
+		b.WriteString(statusStyle.Render("No tracked directories yet."))
+		b.WriteString("\n")
+		return
+	}
+
+	b.WriteString(dirLabelStyle.Render("Tracked directories:"))
+	b.WriteString("\n")
+
+	display := dirs
+	if len(display) > maxDisplay {
+		display = dirs[:maxDisplay]
+	}
+	for i, d := range display {
+		if i == m.selectedDir {
+			b.WriteString(dirItemStyle.Bold(true).Render("▶ " + d.Path))
+		} else {
+			b.WriteString(dirItemStyle.Render("  " + d.Path))
+		}
+		b.WriteString("\n")
+	}
+	if len(dirs) > maxDisplay {
+		b.WriteString(statusStyle.Render(fmt.Sprintf("  ...and %d more. Run `semantic-files --list-dirs` to see all.", len(dirs)-maxDisplay)))
+		b.WriteString("\n")
+	}
+	b.WriteString(statusStyle.Render("↑/↓: select • d: remove"))
+	b.WriteString("\n")
 }
 
 func (m Model) renderSearchResults(b *strings.Builder) {
