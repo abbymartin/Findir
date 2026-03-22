@@ -63,11 +63,12 @@ type Model struct {
 	modelReady  bool
 	trackedDirs []db.TrackedDirectory
 	selectedDir int
+	journalPath string
 	width       int
 	height      int
 }
 
-func New(b *bridge.PythonBridge, database *db.DB, idx *indexer.Indexer) Model {
+func New(b *bridge.PythonBridge, database *db.DB, idx *indexer.Indexer, journalPath string) Model {
 	si := textinput.New()
 	si.Placeholder = "search..."
 	si.CharLimit = 256
@@ -84,6 +85,7 @@ func New(b *bridge.PythonBridge, database *db.DB, idx *indexer.Indexer) Model {
 		indexer:     idx,
 		searchInput: si,
 		dirInput:    di,
+		journalPath: journalPath,
 	}
 }
 
@@ -266,6 +268,9 @@ func (m Model) handleAddDir() (tea.Model, tea.Cmd) {
 
 func (m Model) doSearch(query string) tea.Cmd {
 	return func() tea.Msg {
+		// Process any pending journal entries before searching
+		m.indexer.ProcessJournal(m.journalPath)
+
 		resp, err := m.bridge.Send(map[string]interface{}{
 			"action": "search",
 			"query":  query,

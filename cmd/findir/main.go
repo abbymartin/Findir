@@ -144,7 +144,7 @@ func main() {
 	}
 
 	// Launch TUI
-	model := tui.New(b, database, idx)
+	model := tui.New(b, database, idx, journalPath)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
