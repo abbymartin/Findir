@@ -16,10 +16,23 @@ import (
 )
 
 var supportedExts = map[string]bool{
-	".txt": true,
-	".csv": true,
-	".log": true,
-	".md":  true,
+	".txt":  true,
+	".csv":  true,
+	".log":  true,
+	".md":   true,
+	".go":   true,
+	".py":   true,
+	".js":   true,
+	".jsx":  true,
+	".java": true,
+	".c":    true,
+	".h":    true,
+	".cpp":  true,
+	".cc":   true,
+	".cxx":  true,
+	".hpp":  true,
+	".hxx":  true,
+	".rs":   true,
 }
 
 type watcher struct {
