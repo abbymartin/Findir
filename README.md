@@ -80,6 +80,9 @@ Uses [poppler-utils](https://poppler.freedesktop.org/) for robust pdf text extra
 ### Code (.c, .h, .cpp, .cc, .cxx, .hpp, .hxx, .java, .js, .jsx, .go, .rs)
 Extracts and indexes definitions for method/functions, classes, and structs as well as comments for the languages above. Parses code files using [Tree-sitter](https://github.com/tree-sitter/tree-sitter).
 
+### Markup (.html, .html, .xhtml, .xml, .svg, .docx, .pptx, .xlsx)
+Extracts and indexes text content from tags, alt text, and metadata. Microsoft Office formats (.docx, .pptx, .xlsx) are unzipped before parsing.
+
 ### Latex (.tex)
 Indexes text content after stripping math and commands using regex.
 
