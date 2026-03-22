@@ -42,6 +42,7 @@ var supportedExts = map[string]bool{
 	".pptx":  true,
 	".xlsx":  true,
 	".tex":   true,
+	".pdf":   true,
 }
 
 type watcher struct {
