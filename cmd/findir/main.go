@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"findir/internal/bridge"
+	"findir/internal/daemon"
 	"findir/internal/db"
 	"findir/internal/indexer"
 	"findir/internal/tui"
@@ -44,6 +45,9 @@ func main() {
 	}
 	defer database.Close()
 
+	journalPath := filepath.Join(dataDir, "journal.jsonl")
+	pidPath := filepath.Join(dataDir, "daemon.pid")
+
 	if *removeDir != "" {
 		dir, err := database.GetTrackedDirectoryByPath(*removeDir)
 		if err != nil {
@@ -53,6 +57,7 @@ func main() {
 			log.Fatalf("removing directory: %v", err)
 		}
 		fmt.Printf("Removed: %s\n", *removeDir)
+		daemon.RestartIfRunning(pidPath, dbPath, journalPath)
 		return
 	}
 
@@ -69,9 +74,6 @@ func main() {
 		}
 		return
 	}
-
-	journalPath := filepath.Join(dataDir, "journal.jsonl")
-	pidPath := filepath.Join(dataDir, "daemon.pid")
 
 	if *daemonStart {
 		exePath, _ := os.Executable()
@@ -133,6 +135,7 @@ func main() {
 			log.Fatalf("adding directory: %v", err)
 		}
 		fmt.Fprintf(os.Stderr, "Done.\n")
+		daemon.RestartIfRunning(pidPath, dbPath, journalPath)
 		return
 	}
 
@@ -145,6 +148,9 @@ func main() {
 
 	// Launch TUI
 	model := tui.New(b, database, idx, journalPath)
+	model.DaemonRestart = func() error {
+		return daemon.RestartIfRunning(pidPath, dbPath, journalPath)
+	}
 	p := tea.NewProgram(&model, tea.WithAltScreen())
 	model.SetProgram(p)
 	if _, err := p.Run(); err != nil {

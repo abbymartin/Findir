@@ -68,8 +68,9 @@ type Model struct {
 	trackedDirs []db.TrackedDirectory
 	selectedDir int
 	journalPath string
-	indexLog []string
-	program  *tea.Program
+	indexLog       []string
+	program        *tea.Program
+	DaemonRestart  func() error
 	width    int
 	height   int
 }
@@ -218,6 +219,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.indexStatus = "Directory added successfully."
 			m.dirInput.SetValue("")
+			m.restartDaemon()
 		}
 		return m, loadTrackedDirs(m.database)
 
@@ -227,6 +229,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.indexStatus = fmt.Sprintf("Error: %v", msg.err)
 		} else {
 			m.indexStatus = "Directory removed."
+			m.restartDaemon()
 		}
 		return m, loadTrackedDirs(m.database)
 
@@ -249,6 +252,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dirInput, cmd = m.dirInput.Update(msg)
 	}
 	return m, cmd
+}
+
+func (m *Model) restartDaemon() {
+	if m.DaemonRestart != nil {
+		if err := m.DaemonRestart(); err != nil {
+			m.indexLog = append(m.indexLog, fmt.Sprintf("Warning: daemon restart: %v", err))
+		} else {
+			m.indexLog = append(m.indexLog, "Daemon restarted.")
+		}
+	}
 }
 
 func (m Model) handleSearch() (tea.Model, tea.Cmd) {
