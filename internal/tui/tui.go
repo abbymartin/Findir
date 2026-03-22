@@ -266,16 +266,44 @@ func (m Model) handleAddDir() (tea.Model, tea.Cmd) {
 	}
 }
 
+func parseSearchQuery(input string) (string, map[string]string) {
+	filters := make(map[string]string)
+	var queryParts []string
+	for _, token := range strings.Fields(input) {
+		switch {
+		case strings.HasPrefix(token, "ext:"):
+			filters["ext"] = token[4:]
+		case strings.HasPrefix(token, "after:"):
+			filters["after"] = token[6:]
+		case strings.HasPrefix(token, "before:"):
+			filters["before"] = token[7:]
+		default:
+			queryParts = append(queryParts, token)
+		}
+	}
+	return strings.Join(queryParts, " "), filters
+}
+
 func (m Model) doSearch(query string) tea.Cmd {
 	return func() tea.Msg {
 		// Process any pending journal entries before searching
 		m.indexer.ProcessJournal(m.journalPath)
 
-		resp, err := m.bridge.Send(map[string]interface{}{
+		semanticQuery, filters := parseSearchQuery(query)
+		if semanticQuery == "" {
+			semanticQuery = query // use full input if no query words remain
+		}
+
+		req := map[string]interface{}{
 			"action": "search",
-			"query":  query,
+			"query":  semanticQuery,
 			"top_k":  4,
-		})
+		}
+		if len(filters) > 0 {
+			req["filters"] = filters
+		}
+
+		resp, err := m.bridge.Send(req)
 		if err != nil {
 			return searchErrorMsg{err: err}
 		}
@@ -396,6 +424,10 @@ func (m Model) View() string {
 		m.renderTrackedDirs(&b)
 	}
 
+	if m.mode == searchView {
+		b.WriteString(statusStyle.Render("filters: type:.py after:YYYY-MM-DD before:YYYY-MM-DD"))
+		b.WriteString("\n")
+	}
 	b.WriteString(statusStyle.Render("tab: switch view • enter: submit • esc: quit"))
 	b.WriteString("\n")
 

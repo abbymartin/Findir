@@ -14,16 +14,28 @@ def handle_request(req: dict, db_conn) -> dict:
     elif action == "search":
         query = req["query"]
         top_k = req.get("top_k", 5)
+        filters = req.get("filters", {})
+
         query_vec = embeddings.generate_embedding(query)
         all_embeddings = database.get_all_embeddings(db_conn)
 
+        # Pre-filter by file metadata if filters provided
+        allowed_ids = database.get_filtered_file_ids(
+            db_conn,
+            ext=filters.get("type"),
+            after=filters.get("after"),
+            before=filters.get("before"),
+        )
+
+        # Build file path lookup
+        file_paths = database.get_file_paths(db_conn)
+
         scored = []
         for emb_id, file_id, chunk_text, vec in all_embeddings:
+            if allowed_ids is not None and file_id not in allowed_ids:
+                continue
             score = embeddings.compute_similarity(query_vec, vec)
-            row = db_conn.execute(
-                "SELECT path FROM indexed_files WHERE id = ?", (file_id,)
-            ).fetchone()
-            file_path = row[0] if row else "unknown"
+            file_path = file_paths.get(file_id, "unknown")
             scored.append({"file_path": file_path, "chunk_text": chunk_text, "score": score})
 
         scored.sort(key=lambda x: x["score"], reverse=True)

@@ -37,6 +37,42 @@ def get_all_embeddings(conn: sqlite3.Connection) -> list[tuple[int, int, str, li
     return results
 
 
+def get_filtered_file_ids(
+    conn: sqlite3.Connection,
+    ext: str | None = None,
+    after: str | None = None,
+    before: str | None = None,
+) -> set[int] | None:
+    """Return set of file_ids matching filters, or None if no filters given."""
+    conditions = []
+    params = []
+
+    if ext:
+        if not ext.startswith("."):
+            ext = "." + ext
+        conditions.append("path LIKE ?")
+        params.append("%" + ext)
+    if after:
+        conditions.append("modified_at >= ?")
+        params.append(after)
+    if before:
+        conditions.append("modified_at <= ?")
+        params.append(before)
+
+    if not conditions:
+        return None
+
+    query = "SELECT id FROM indexed_files WHERE " + " AND ".join(conditions)
+    rows = conn.execute(query, params).fetchall()
+    return {row[0] for row in rows}
+
+
+def get_file_paths(conn: sqlite3.Connection) -> dict[int, str]:
+    """Return {file_id: path} for all indexed files."""
+    rows = conn.execute("SELECT id, path FROM indexed_files").fetchall()
+    return {row[0]: row[1] for row in rows}
+
+
 def mark_file_indexed(
     conn: sqlite3.Connection,
     directory_id: int,
