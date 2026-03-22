@@ -32,7 +32,14 @@ var supportedExts = map[string]bool{
 	".cxx":  true,
 	".hpp":  true,
 	".hxx":  true,
-	".rs":   true,
+	".rs":    true,
+	".html":  true,
+	".htm":   true,
+	".xhtml": true,
+	".xml":   true,
+	".svg":   true,
+	".docx":  true,
+	".pptx":  true,
 }
 
 type watcher struct {
