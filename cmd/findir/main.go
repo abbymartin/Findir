@@ -80,6 +80,16 @@ func main() {
 			log.Fatalf("watcher binary not found. Build it with: go build -o watcher ./cmd/watcher")
 		}
 
+		pidData, err := os.ReadFile(pidPath)
+		if (err == nil) {
+			pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
+			if err != nil {
+				log.Fatalf("invalid PID file")
+			}
+
+			log.Fatalf("Daemon already running (PID %d). Use findir --daemon-stop if you want to stop it.", pid)
+		}
+
 		cmd := exec.Command(watcherPath, dbPath, journalPath)
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -92,7 +102,7 @@ func main() {
 	if *daemonStop {
 		pidData, err := os.ReadFile(pidPath)
 		if err != nil {
-			log.Fatalf("daemon not running (no PID file)")
+			log.Fatalf("daemon not running (no PID found)")
 		}
 		pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
 		if err != nil {
