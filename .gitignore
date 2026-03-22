@@ -5,3 +5,4 @@ __pycache__/
 .claude/
 findir
 watcher
+examples/

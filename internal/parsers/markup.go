@@ -15,7 +15,7 @@ import (
 type MarkupParser struct{}
 
 func (m *MarkupParser) Extensions() []string {
-	return []string{".html", ".htm", ".xhtml", ".xml", ".svg", ".docx", ".pptx"}
+	return []string{".html", ".htm", ".xhtml", ".xml", ".svg", ".docx", ".pptx", ".xlsx"}
 }
 
 func (m *MarkupParser) Parse(fpath string) ([]string, error) {
@@ -33,6 +33,8 @@ func (m *MarkupParser) Parse(fpath string) ([]string, error) {
 		text, err = parseDOCX(fpath)
 	case ".pptx":
 		text, err = parsePPTX(fpath)
+	case ".xlsx":
+		text, err = parseXLSX(fpath)
 	default:
 		return nil, nil
 	}
@@ -281,6 +283,63 @@ func extractPptxSlideText(r io.Reader) string {
 			if t.Name.Local == "t" {
 				inText = false
 				b.WriteByte(' ')
+			}
+		case xml.CharData:
+			if inText {
+				b.WriteString(string(t))
+			}
+		}
+	}
+
+	return b.String()
+}
+
+func parseXLSX(fpath string) (string, error) {
+	r, err := zip.OpenReader(fpath)
+	if err != nil {
+		return "", fmt.Errorf("opening xlsx: %w", err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if f.Name == "xl/sharedStrings.xml" {
+			rc, err := f.Open()
+			if err != nil {
+				return "", fmt.Errorf("opening sharedStrings.xml: %w", err)
+			}
+			defer rc.Close()
+			return extractXlsxStrings(rc), nil
+		}
+	}
+
+	return "", nil
+}
+
+func extractXlsxStrings(r io.Reader) string {
+	decoder := xml.NewDecoder(r)
+	var b strings.Builder
+	inText := false
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			// <t> inside <si> contains shared string text
+			if t.Name.Local == "t" {
+				inText = true
+			}
+		case xml.EndElement:
+			if t.Name.Local == "t" {
+				inText = false
+				b.WriteByte(' ')
+			}
+			// Add newline between shared string entries
+			if t.Name.Local == "si" {
+				b.WriteByte('\n')
 			}
 		case xml.CharData:
 			if inText {
