@@ -26,6 +26,7 @@ func New(database *db.DB, b *bridge.PythonBridge) *Indexer {
 		&parsers.MarkdownParser{},
 		&parsers.CodeParser{},
 		&parsers.MarkupParser{},
+		&parsers.LatexParser{},
 	)
 	return &Indexer{DB: database, Bridge: b, registry: registry}
 }
